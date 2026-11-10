@@ -328,7 +328,8 @@ struct DiscoverView: View {
                                 onOpen(a)
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    CoverImage(image: library.covers[a.id], title: a.title, size: 96)
+                                    AlbumArt(albumID: a.id, title: a.title, size: .thumb)
+                                        .frame(width: 96, height: 96)
                                     Text(a.title)
                                         .font(Theme.mono(10, .semibold))
                                         .foregroundStyle(Theme.fg)

@@ -164,6 +164,28 @@ final class PlayerEngine {
 
     func cycleRepeat() { repeatMode = repeatMode.next }
 
+    /// Сыграть следующим (после текущего трека). При включённом шафле порядок всё равно случайный.
+    func playNext(_ track: Track) {
+        guard !queue.isEmpty else {
+            play([track])
+            return
+        }
+        queue.insert(track, at: min(index + 1, queue.count))
+    }
+
+    func addToQueue(_ track: Track) {
+        guard !queue.isEmpty else {
+            play([track])
+            return
+        }
+        queue.append(track)
+    }
+
+    /// Перейти к треку в очереди (для экрана очереди).
+    func jump(to i: Int) {
+        load(i)
+    }
+
     /// nil = выключить. За 20 секунд до конца звук плавно затихает.
     func setSleep(minutes: Int?) {
         player.volume = 1

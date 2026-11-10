@@ -42,7 +42,7 @@ struct CoverFlowView: View {
                     LazyHStack(spacing: -size * overlap) {
                         ForEach(Array(albums.enumerated()), id: \.element.id) { i, album in
                             CoverTile(
-                                image: library.covers[album.id],
+                                albumID: album.id,
                                 title: album.title,
                                 size: size,
                                 reflection: refl
@@ -153,16 +153,18 @@ struct CoverFlowView: View {
 
 /// Обложка + зеркальное отражение снизу
 struct CoverTile: View {
-    let image: UIImage?
+    let albumID: String
     let title: String
     let size: CGFloat
     var reflection: Double = 0.35
 
     var body: some View {
         VStack(spacing: 2) {
-            CoverImage(image: image, title: title, size: size)
+            AlbumArt(albumID: albumID, title: title, size: .mid)
+                .frame(width: size, height: size)
 
-            CoverImage(image: image, title: title, size: size)
+            AlbumArt(albumID: albumID, title: title, size: .mid)
+                .frame(width: size, height: size)
                 .scaleEffect(x: 1, y: -1)
                 .frame(height: size * 0.35, alignment: .top)
                 .clipped()

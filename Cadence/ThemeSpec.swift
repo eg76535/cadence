@@ -1,15 +1,18 @@
 import SwiftUI
 
-enum WallKind: String { case solid, gradient, aurora, cover }
-enum TabsPos: String { case bar, dock, top }
-enum MiniStyle: String { case bar, float }
-enum FlowAlign: String { case center, top, low }
-enum FontKind: String { case sys, jb, plex, space }
+enum WallKind: String, CaseIterable { case solid, gradient, aurora, cover }
+enum TabsPos: String, CaseIterable { case bar, dock, top }
+enum MiniStyle: String, CaseIterable { case bar, float }
+enum FlowAlign: String, CaseIterable { case center, top, low }
+enum FontKind: String, CaseIterable { case sys, jb, plex, space, sf, rounded, serif }
+/// classic = Rockbox/iPod (моноширинный, плоский), modern = привычный вид в духе Apple Music.
+enum UIStyle: String, CaseIterable { case classic, modern }
 
 /// Тема оформления. Те же поля, что в JSON из дизайн-стенда (HTML).
 /// Любое поле можно не указывать: подставится значение по умолчанию (стиль Rockbox).
 struct ThemeSpec: Equatable {
     var name = "Rockbox"
+    var ui = UIStyle.classic
     var bg = "#000000"
     var fg = "#ffffff"
     var dim = "#8c8c8c"
@@ -54,6 +57,56 @@ struct ThemeSpec: Equatable {
     var overlapL = 0.66
 
     var isLight: Bool { ThemeSpec.luminance(bg) > 0.45 }
+    var modern: Bool { ui == .modern }
+
+    // MARK: serialization
+
+    /// JSON в том же формате, что и в дизайн-стенде. Его можно скопировать и отправить кому угодно.
+    func jsonString() -> String {
+        func r(_ v: Double) -> Double { (v * 100).rounded() / 100 }
+        var o: [String: Any] = [:]
+        o["name"] = name
+        o["ui"] = ui.rawValue
+        o["bg"] = bg
+        o["fg"] = fg
+        o["dim"] = dim
+        o["accent"] = accent
+        o["wall"] = wall.rawValue
+        o["wA"] = wA
+        o["wB"] = wB
+        o["wC"] = wC
+        o["wAngle"] = r(wAngle)
+        o["wBlur"] = r(wBlur)
+        o["wDim"] = r(wDim)
+        o["waves"] = r(waves)
+        o["waveCol"] = waveCol
+        o["glass"] = glass
+        o["gBlur"] = r(gBlur)
+        o["gTint"] = r(gTint)
+        o["gBorder"] = r(gBorder)
+        o["gSat"] = r(gSat)
+        o["font"] = font.rawValue
+        o["radius"] = r(radius)
+        o["uiR"] = r(uiR)
+        o["tabs"] = tabs.rawValue
+        o["mini"] = mini.rawValue
+        o["align"] = align.rawValue
+        o["hdr"] = hdr
+        o["angle"] = r(angle)
+        o["flip"] = flip
+        o["spread"] = r(spread)
+        o["sideScale"] = r(sideScale)
+        o["overlap"] = r(overlap)
+        o["cover"] = r(cover)
+        o["refl"] = r(refl)
+        o["persp"] = r(persp)
+        o["coverL"] = r(coverL)
+        o["spreadL"] = r(spreadL)
+        o["overlapL"] = r(overlapL)
+        guard let data = try? JSONSerialization.data(withJSONObject: o, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else { return "{}" }
+        return text
+    }
 
     // MARK: parsing
 
@@ -63,6 +116,7 @@ struct ThemeSpec: Equatable {
         var t = ThemeSpec()
         let d = ThemeSpec()
         t.name = text(o["name"], d.name)
+        t.ui = pick(o["ui"], d.ui)
         t.bg = color(o["bg"], d.bg)
         t.fg = color(o["fg"], d.fg)
         t.dim = color(o["dim"], d.dim)
@@ -168,7 +222,29 @@ extension Color {
 
 /// Встроенные темы, те же, что в дизайн-стенде.
 enum BuiltinThemes {
+    static let defaultID = "builtin:music"
+
     static let all: [(id: String, json: String)] = [
+        ("builtin:music", """
+        {"name":"Music","ui":"modern","font":"sf","bg":"#0c0c0e","fg":"#ffffff","dim":"#9a9aa2","accent":"#fa2d48",
+         "wall":"solid","glass":true,"gBlur":24,"gTint":0.08,"gBorder":0.2,"radius":10,"uiR":16,
+         "tabs":"bar","mini":"float","hdr":true,"angle":58,"spread":0.46,"overlap":0.6}
+        """),
+        ("builtin:musiclight", """
+        {"name":"Music Light","ui":"modern","font":"sf","bg":"#f6f6f8","fg":"#111114","dim":"#85858c","accent":"#fa2d48",
+         "wall":"solid","glass":true,"gBlur":24,"gTint":0.1,"gBorder":0.12,"radius":10,"uiR":16,
+         "tabs":"bar","mini":"float","hdr":true,"angle":55,"refl":0.2}
+        """),
+        ("builtin:glowmod", """
+        {"name":"Cover Glow","ui":"modern","font":"rounded","bg":"#08080b","fg":"#ffffff","dim":"#b4b4bc","accent":"#ffffff",
+         "wall":"cover","wBlur":55,"wDim":0.55,"glass":true,"gBlur":28,"gTint":0.1,"gBorder":0.26,
+         "radius":12,"uiR":22,"tabs":"bar","mini":"float","hdr":false,"align":"low"}
+        """),
+        ("builtin:night", """
+        {"name":"Night Blue","ui":"modern","font":"sf","bg":"#070b16","fg":"#eef2ff","dim":"#8f9bbd","accent":"#6c8cff",
+         "wall":"aurora","wA":"#1b2a6b","wB":"#0e3a5c","wC":"#3b1f6e","wDim":0.45,"glass":true,"gBlur":26,"gTint":0.09,
+         "gBorder":0.22,"radius":12,"uiR":20,"tabs":"bar","mini":"float","hdr":true}
+        """),
         ("builtin:rockbox", #"{"name":"Rockbox"}"#),
         ("builtin:seaglass", """
         {"name":"Sea Glass","bg":"#031a22","fg":"#f1fbfb","dim":"#9cc3c7","accent":"#7ff0e4",
@@ -181,7 +257,7 @@ enum BuiltinThemes {
          "radius":2,"font":"plex","tabs":"bar","mini":"bar","angle":55,"refl":0.2}
         """),
         ("builtin:coverglow", """
-        {"name":"Cover Glow","bg":"#08080b","fg":"#ffffff","dim":"#b4b4bc","accent":"#ffffff",
+        {"name":"Cover Glow Classic","bg":"#08080b","fg":"#ffffff","dim":"#b4b4bc","accent":"#ffffff",
          "wall":"cover","wBlur":50,"wDim":0.62,"glass":true,"gBlur":28,"gTint":0.1,"gBorder":0.26,
          "radius":10,"uiR":22,"tabs":"dock","mini":"float","hdr":false,"align":"low"}
         """)

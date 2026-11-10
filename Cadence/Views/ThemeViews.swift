@@ -151,6 +151,7 @@ extension View {
 /// Экран выбора темы.
 struct ThemesView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openSheet) private var openSheet
     private let store = ThemeStore.shared
 
     var body: some View {
@@ -179,6 +180,19 @@ struct ThemesView: View {
                             Hairline().padding(.leading, 20)
                         }
                     }
+
+                    Button {
+                        dismiss()
+                        openSheet(.themeEditor)
+                    } label: {
+                        Text("РЕДАКТИРОВАТЬ ТЕКУЩУЮ ТЕМУ")
+                            .font(Theme.mono(12, .bold))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.top, 22)
+                            .padding(.bottom, 6)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
 
                     Button {
                         store.importFromClipboard()

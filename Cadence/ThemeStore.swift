@@ -16,7 +16,9 @@ final class ThemeStore {
 
     private(set) var spec = ThemeSpec()
     private(set) var themes: [SavedTheme] = []
-    private(set) var activeID = "builtin:rockbox"
+    private(set) var activeID = BuiltinThemes.defaultID
+    /// Идёт ли живой предпросмотр из редактора (тогда `spec` не равен сохранённой теме).
+    private(set) var previewing = false
     var notice: String?
 
     private let defaults = UserDefaults.standard
@@ -24,7 +26,15 @@ final class ThemeStore {
     private var themesDir: URL { docs.appendingPathComponent("Themes", isDirectory: true) }
 
     private init() {
-        activeID = defaults.string(forKey: "cadence.themeID") ?? "builtin:rockbox"
+        activeID = defaults.string(forKey: "cadence.themeID") ?? BuiltinThemes.defaultID
+        // один раз после обновления переключаем на новый привычный вид; старый Rockbox остаётся в списке
+        if !defaults.bool(forKey: "cadence.modernMigrated") {
+            defaults.set(true, forKey: "cadence.modernMigrated")
+            if activeID == "builtin:rockbox" {
+                activeID = BuiltinThemes.defaultID
+                defaults.set(activeID, forKey: "cadence.themeID")
+            }
+        }
         reload()
     }
 
@@ -61,7 +71,7 @@ final class ThemeStore {
         themes = list
         let chosen = list.first(where: { $0.id == activeID }) ?? list[0]
         activeID = chosen.id
-        if spec != chosen.spec { spec = chosen.spec }
+        if !previewing && spec != chosen.spec { spec = chosen.spec }
     }
 
     private func loadFile(_ url: URL, id: String) -> SavedTheme? {
@@ -78,9 +88,50 @@ final class ThemeStore {
 
     func activate(_ id: String) {
         guard let t = themes.first(where: { $0.id == id }) else { return }
+        previewing = false
         activeID = id
         defaults.set(id, forKey: "cadence.themeID")
         spec = t.spec
+    }
+
+    var activeTheme: SavedTheme? { themes.first(where: { $0.id == activeID }) }
+
+    // MARK: editor
+
+    /// Живой предпросмотр: экран перерисовывается сразу, на диск ничего не пишется.
+    func preview(_ s: ThemeSpec) {
+        previewing = true
+        spec = s
+    }
+
+    /// Отмена правок: возвращаем сохранённую активную тему.
+    func endPreview() {
+        previewing = false
+        if let t = activeTheme { spec = t.spec }
+    }
+
+    /// Сохраняет тему в Documents/Themes и делает её активной.
+    /// `replacing`: id пользовательской темы, которую правим (файл перезапишется).
+    @discardableResult
+    func save(_ s: ThemeSpec, replacing: String?) -> Bool {
+        try? FileManager.default.createDirectory(at: themesDir, withIntermediateDirectories: true)
+        let file = Self.slug(s.name) + ".json"
+        let data = Data(s.jsonString().utf8)
+        do {
+            try data.write(to: themesDir.appendingPathComponent(file), options: .atomic)
+        } catch {
+            notice = "Не удалось сохранить тему."
+            return false
+        }
+        // переименовали свою тему: старый файл убираем, чтобы не плодить копии
+        if let old = replacing, old.hasPrefix("Themes/"), old != "Themes/" + file {
+            try? FileManager.default.removeItem(at: docs.appendingPathComponent(old))
+        }
+        previewing = false
+        reload()
+        activate("Themes/" + file)
+        notice = "Тема «\(s.name)» сохранена."
+        return true
     }
 
     @discardableResult
@@ -116,13 +167,13 @@ final class ThemeStore {
         let url = id == "theme.json" ? docs.appendingPathComponent("theme.json") : docs.appendingPathComponent(id)
         try? FileManager.default.removeItem(at: url)
         if activeID == id {
-            activeID = "builtin:rockbox"
+            activeID = BuiltinThemes.defaultID
             defaults.set(activeID, forKey: "cadence.themeID")
         }
         reload()
     }
 
-    private static func slug(_ s: String) -> String {
+    static func slug(_ s: String) -> String {
         let mapped = s.lowercased().map { ($0.isLetter || $0.isNumber) ? String($0) : "-" }.joined()
         let joined = mapped.split(separator: "-").joined(separator: "-")
         return joined.isEmpty ? "theme" : joined

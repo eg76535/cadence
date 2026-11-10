@@ -100,6 +100,40 @@ final class ServerAI {
         return WaveRequest.from(json: obj)
     }
 
+    /// Описание словами -> тема оформления. Накладывается на текущую тему, поэтому раскладка
+    /// и параметры Cover Flow остаются как были, меняется только внешний вид.
+    func generateTheme(prompt: String, current: ThemeSpec) async throws -> ThemeSpec {
+        busy = true
+        status = "DESIGNING…"
+        defer { busy = false; status = "" }
+
+        let system = """
+        You are a UI designer for a music player app. Turn the user's description into a color theme. \
+        Reply with ONLY one JSON object, no prose. Keys: "name" (max 3 words), \
+        "bg","fg","dim","accent" (hex #rrggbb; fg must contrast strongly with bg, dim is a muted version of fg, accent is a vivid highlight), \
+        "wall" (solid|gradient|aurora|cover), "wA","wB","wC" (hex, used by gradient and aurora), \
+        "wDim" 0-0.85 (how much the wallpaper is darkened), "glass" true/false (translucent bars), \
+        "font" (sf|rounded|serif), "radius" 0-24 (cover corner radius), "uiR" 0-32 (panel corner radius).
+        """
+        let reply = try await chat(system: system, user: "Description: \(prompt)", maxTokens: 320, temperature: 0.7)
+        guard let obj = Self.extractJSON(reply) as? [String: Any] else { throw AIError.badReply }
+
+        let allowed: Set<String> = [
+            "name", "bg", "fg", "dim", "accent", "wall", "wA", "wB", "wC",
+            "wDim", "glass", "font", "radius", "uiR"
+        ]
+        var merged: [String: Any] = [:]
+        if let base = try? JSONSerialization.jsonObject(with: Data(current.jsonString().utf8)) as? [String: Any] {
+            merged = base
+        }
+        for (key, value) in obj where allowed.contains(key) {
+            merged[key] = value
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: merged),
+              let spec = ThemeSpec.parse(data) else { throw AIError.badReply }
+        return spec
+    }
+
     /// Альбомы, которых нет в библиотеке, под вкус.
     func recommend(mode: RecMode, hint: String, library: Library, taste: TasteStore, tags: TagStore) async throws -> [Recommendation] {
         busy = true

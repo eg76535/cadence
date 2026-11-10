@@ -20,21 +20,32 @@
 - Бесплатный Apple ID: нельзя Push, iCloud, App Groups и прочие capabilities. Не добавляй их.
 - Воспроизведение через AVPlayer. Форматы вне AVFoundation (OGG, Opus, APE, WavPack, MKV) только через MobileVLCKit, это отдельный этап.
 
-## Эстетика (держать строго)
+## Эстетика
 
-- По умолчанию тема Rockbox: чёрный фон, белый текст, серый `Theme.dim`, один акцент `Theme.accent`, без скруглений, теней и градиентов. Остальное (стекло, фон, плавающие панели) включается только темой.
-- Весь текст моноширинный через `Theme.mono(...)`.
-- Цвета брать только через `Theme.*` (они читают активную тему), никаких литералов `Color.black` и т.п. во view.
-- Разделители в плоском режиме только `Hairline`.
+Тем два вида интерфейса, переключаются полем `ui` в теме (`ThemeSpec.ui`):
+
+- **modern** (по умолчанию, тема `builtin:music`): привычный вид в духе Apple Music. SF-шрифт, вкладки с иконками SF Symbols, сетка альбомов, мини-плеер над вкладками, плеер выезжает снизу и закрывается свайпом вниз. Код в `Cadence/Modern/`.
+- **classic** (Rockbox/iPod): чёрный фон, моноширинный шрифт, без скруглений и теней, вкладки текстом. Код в `Views/` (`ClassicRootView` в `RootView.swift`). В этом режиме держать старую строгость: один акцент, `Hairline` как разделитель, ничего лишнего.
+
+Общие правила для обоих:
+
+- Цвета только через `Theme.*` (читают активную тему), никаких литералов `Color.black` во view. Исключение: тени и затемнение поверх обложек.
+- Шрифт только через `Theme.font(...)` (старое имя `Theme.mono(...)` делает то же самое). Он сам берёт SF/rounded/serif или моноширинный по теме.
+- Обложки показывать через `AlbumArt` (async, из дискового кеша). Не читать `library.covers[id]` (полный размер, синхронно) в списках и сетках: это тормоза и память.
+- Настройки и редактор темы: `Modern/SettingsView.swift`, `Modern/ThemeEditor.swift` (живой предпросмотр через `ThemeStore.preview`).
 
 ## Структура
 
-- `Library.swift`: скан Documents, теги, обложки, группировка по альбомам, кеш по mtime
+- `Library.swift`: кеш библиотеки (`library.json` в Application Support), скан Documents только по кнопке (`rescan(full:)`), группировка по альбомам, правки пользователя (`edits.json`), догадки по папкам и имени файла
+- `Tags.swift`: чтение тегов. `FlacReader` (свой разбор FLAC: STREAMINFO, VORBIS_COMMENT, PICTURE, потому что AVFoundation на iOS не отдаёт теги/обложки FLAC), `AVTagReader` для MP3/M4A/WAV/AIFF
+- `Covers.swift`: `CoverDisk` (JPEG до 800 px в `Application Support/Cadence/covers`, ключ = sha1), `CoverStore` (NSCache трёх размеров, async-загрузка)
+- `Models.swift`: `Track` (id = путь от Documents, url собирается на лету), `Album`, `TrackEdit`
+- `Modern/`: привычный интерфейс (`ModernRoot`, `AlbumsScreen`, `SongsScreen`, `AlbumPage`, `ModernPlayer`), `SettingsView`, `ThemeEditor`, `MetadataEditor`, общие мелочи в `ModernKit`
 - `PlayerEngine.swift`: AVPlayer, очередь, шафл/репит, Now Playing, команды с экрана блокировки
-- `Views/CoverFlowView.swift`: Cover Flow, параметры из активной темы, портрет и альбомная
+- `Views/CoverFlowView.swift`: Cover Flow, параметры из активной темы, портрет и альбомная (плитки грузят обложки async)
 - `ThemeSpec.swift`: модель темы и разбор JSON (формат общий с дизайн-стендом); `ThemeStore.swift`: список тем, `Documents/theme.json`, `Documents/Themes/`, вставка из буфера
 - `Views/ThemeViews.swift`: `WallView` (фон, волны), `PanelStyle` (стекло/плавающая плашка), `ThemesView`
-- `Views/RootView.swift`: вкладки FLOW / ALBUMS / SONGS, мини-плеер, шиты
+- `Views/RootView.swift`: `RootView` (выбор modern/classic по теме, шиты через `AppSheet`, жизненный цикл) и `ClassicRootView` (старые вкладки FLOW / ALBUMS / SONGS / WAVE)
 
 - `Taste/TasteStore.swift`: история прослушиваний, лайки, вишлист (JSON в Application Support). Пишет в него `PlayerEngine`
 - `Taste/AlbumTags.swift`: настроение альбомов (теги от ИИ + эвристика по жанру)
@@ -47,11 +58,10 @@
 
 ## Дальше (по приоритету)
 
-1. Починить первую сборку, если упадёт (v0.2 с темами и альбомной тоже ни разу не компилировалась), и подогнать вид по ощущениям пользователя.
+1. Починить сборку, если упадёт (v0.4: библиотека с кешем, FLAC-парсер, modern-интерфейс, настройки и редактор тем написаны без компилятора), и подогнать вид по ощущениям пользователя.
    - Тема: вшить шрифты JetBrains/Plex/Space Mono, подключить iOS 26 `glassEffect` через `#if compiler(>=6.2)`.
 2. Кнопка импорта файлов внутри приложения (`fileImporter`, копирование в Documents).
-3. Поиск, сортировка, вкладка артистов.
-4. Плейлисты и «очередь» (play next).
-5. Сохранение позиции и очереди между запусками.
-6. MobileVLCKit для OGG/Opus/APE.
-7. Эквалайзер, gapless.
+3. Вкладка/страница артистов, плейлисты.
+4. Сохранение позиции и очереди между запусками.
+5. MobileVLCKit для OGG/Opus/APE.
+6. Эквалайзер, gapless.

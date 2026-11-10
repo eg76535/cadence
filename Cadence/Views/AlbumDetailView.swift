@@ -3,6 +3,8 @@ import SwiftUI
 struct AlbumDetailView: View {
     @Environment(Library.self) private var library
     @Environment(PlayerEngine.self) private var player
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openSheet) private var openSheet
 
     let album: Album
 
@@ -10,7 +12,8 @@ struct AlbumDetailView: View {
         ScrollView {
             VStack(spacing: 0) {
                 VStack(spacing: 8) {
-                    CoverImage(image: library.covers[album.id], title: album.title, size: 190)
+                    AlbumArt(albumID: album.id, title: album.title, size: .mid)
+                        .frame(width: 190, height: 190)
                         .padding(.top, 28)
                     Text(album.title)
                         .font(Theme.mono(17, .bold))
@@ -38,6 +41,14 @@ struct AlbumDetailView: View {
                             Text("SHUFFLE")
                                 .font(Theme.mono(13, .bold))
                                 .foregroundStyle(Theme.fg)
+                        }
+                        Button {
+                            dismiss()
+                            openSheet(.editAlbum(album))
+                        } label: {
+                            Text("EDIT")
+                                .font(Theme.mono(13, .bold))
+                                .foregroundStyle(Theme.dim)
                         }
                     }
                     .buttonStyle(.plain)

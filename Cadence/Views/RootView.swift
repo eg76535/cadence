@@ -1,11 +1,90 @@
 import SwiftUI
 
+/// Корень приложения: выбирает привычный (modern) или классический (Rockbox) интерфейс по теме,
+/// держит шиты (настройки, редактор тем, правка тегов) и жизненный цикл.
+@MainActor
 struct RootView: View {
     @Environment(Library.self) private var library
     @Environment(PlayerEngine.self) private var player
     @Environment(TasteStore.self) private var taste
     @Environment(TagStore.self) private var tags
     @Environment(\.scenePhase) private var scenePhase
+    private let store = ThemeStore.shared
+
+    @State private var sheet: AppSheet?
+
+    var body: some View {
+        let s = store.spec
+        Group {
+            if s.modern {
+                ModernRootView()
+            } else {
+                ClassicRootView()
+            }
+        }
+        .environment(\.openSheet, { next in present(next) })
+        .tint(Theme.accent)
+        .preferredColorScheme(s.isLight ? .light : .dark)
+        .sheet(item: $sheet) { item in
+            sheetContent(item)
+        }
+        .task { await library.bootstrapIfNeeded() }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .background {
+                taste.saveNow()
+                tags.saveNow()
+                return
+            }
+            guard phase == .active else { return }
+            player.library = library
+            player.taste = taste
+            store.reload()
+        }
+    }
+
+    /// Если уже открыт другой шит, сначала закрываем его: два шита подряд SwiftUI меняет криво.
+    private func present(_ next: AppSheet) {
+        if sheet == nil {
+            sheet = next
+            return
+        }
+        sheet = nil
+        Task {
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            sheet = next
+        }
+    }
+
+    @ViewBuilder
+    private func sheetContent(_ item: AppSheet) -> some View {
+        switch item {
+        case .settings:
+            SettingsView()
+                .presentationBackground(Theme.bg)
+        case .themeEditor:
+            ThemeEditorView()
+                .presentationDetents([.fraction(0.5), .large])
+                .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.5)))
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Theme.bg)
+        case .classicThemes:
+            ThemesView()
+                .presentationBackground(Theme.bg)
+        case .editTrack(let track):
+            TrackEditSheet(track: track)
+                .presentationBackground(Theme.bg)
+        case .editAlbum(let album):
+            AlbumEditSheet(album: album)
+                .presentationBackground(Theme.bg)
+        }
+    }
+}
+
+/// Старый вид: Rockbox / iPod, моноширинный шрифт, вкладки текстом.
+struct ClassicRootView: View {
+    @Environment(Library.self) private var library
+    @Environment(PlayerEngine.self) private var player
+    @Environment(\.openSheet) private var openSheet
     private let store = ThemeStore.shared
 
     enum Screen: String, CaseIterable {
@@ -18,7 +97,6 @@ struct RootView: View {
     @State private var tab: Screen = .flow
     @State private var detail: Album?
     @State private var showNowPlaying = false
-    @State private var showThemes = false
     @State private var flowSelection: String?
 
     var body: some View {
@@ -39,30 +117,12 @@ struct RootView: View {
                 }
             }
         }
-        .tint(Theme.accent)
-        .preferredColorScheme(s.isLight ? .light : .dark)
         .sheet(item: $detail) { album in
             AlbumDetailView(album: album)
                 .presentationBackground(s.glass ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Theme.bg))
         }
-        .sheet(isPresented: $showThemes) {
-            ThemesView()
-                .presentationBackground(Theme.bg)
-        }
         .fullScreenCover(isPresented: $showNowPlaying) {
             NowPlayingView()
-        }
-        .onChange(of: scenePhase, initial: true) { _, phase in
-            if phase == .background {
-                taste.saveNow()
-                tags.saveNow()
-                return
-            }
-            guard phase == .active else { return }
-            player.library = library
-            player.taste = taste
-            store.reload()
-            Task { await library.rescan() }
         }
     }
 
@@ -87,7 +147,17 @@ struct RootView: View {
                 Spacer()
             }
             Button {
-                showThemes = true
+                openSheet(.settings)
+            } label: {
+                Text("SETTINGS")
+                    .font(Theme.mono(11, .bold))
+                    .foregroundStyle(Theme.accent)
+                    .padding(.leading, 14)
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            Button {
+                openSheet(.classicThemes)
             } label: {
                 Text("THEME")
                     .font(Theme.mono(11, .bold))
@@ -106,7 +176,7 @@ struct RootView: View {
     @ViewBuilder
     private func content(landscape: Bool) -> some View {
         if library.albums.isEmpty {
-            EmptyStateView(isScanning: library.isScanning)
+            EmptyStateView()
         } else {
             switch tab {
             case .flow:

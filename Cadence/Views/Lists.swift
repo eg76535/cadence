@@ -14,7 +14,8 @@ struct AlbumListView: View {
                         onOpen(album)
                     } label: {
                         HStack(spacing: 14) {
-                            CoverImage(image: library.covers[album.id], title: album.title, size: 46)
+                            AlbumArt(albumID: album.id, title: album.title, size: .thumb)
+                                .frame(width: 46, height: 46)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(album.title)
                                     .font(Theme.mono(14, .semibold))
