@@ -3,6 +3,8 @@ import SwiftUI
 struct RootView: View {
     @Environment(Library.self) private var library
     @Environment(PlayerEngine.self) private var player
+    @Environment(TasteStore.self) private var taste
+    @Environment(TagStore.self) private var tags
     @Environment(\.scenePhase) private var scenePhase
     private let store = ThemeStore.shared
 
@@ -10,6 +12,7 @@ struct RootView: View {
         case flow = "FLOW"
         case albums = "ALBUMS"
         case songs = "SONGS"
+        case wave = "WAVE"
     }
 
     @State private var tab: Screen = .flow
@@ -50,8 +53,14 @@ struct RootView: View {
             NowPlayingView()
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .background {
+                taste.saveNow()
+                tags.saveNow()
+                return
+            }
             guard phase == .active else { return }
             player.library = library
+            player.taste = taste
             store.reload()
             Task { await library.rescan() }
         }
@@ -107,6 +116,8 @@ struct RootView: View {
                 AlbumListView(albums: library.albums) { detail = $0 }
             case .songs:
                 SongListView()
+            case .wave:
+                DiscoverView { detail = $0 }
             }
         }
     }

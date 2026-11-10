@@ -8,8 +8,11 @@ struct Track: Identifiable, Hashable {
     let album: String
     let number: Int         // 0 = номер не найден
     let duration: TimeInterval
+    var genre: String = ""
+    var year: Int = 0
 
     var albumID: String { album.lowercased() }
+    var artistID: String { artist.lowercased() }
     var sortNumber: Int { number == 0 ? 9999 : number }
 }
 

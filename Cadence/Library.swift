@@ -120,6 +120,9 @@ final class Library {
         let title = await string(.commonIdentifierTitle) ?? cleaned
         let artist = await string(.commonIdentifierArtist) ?? "Unknown Artist"
         let album = await string(.commonIdentifierAlbumName) ?? folderName ?? "Unknown Album"
+        let genre = await string(.commonIdentifierType) ?? ""
+        let yearText = await string(.commonIdentifierCreationDate) ?? ""
+        let year = Int(yearText.prefix(4)) ?? 0
 
         var cover: UIImage?
         if let artItem = AVMetadataItem.metadataItems(
@@ -141,7 +144,9 @@ final class Library {
             artist: artist,
             album: album,
             number: number,
-            duration: duration.isFinite ? duration : 0
+            duration: duration.isFinite ? duration : 0,
+            genre: genre,
+            year: year
         )
         return (track, cover)
     }

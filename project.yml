@@ -40,3 +40,8 @@ targets:
         # Папка Cadence появляется в Files -> На iPhone, туда кидаем музыку
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        # ИИ на домашнем сервере: http по IP в локалке и запрос разрешения на доступ к сети
+        NSLocalNetworkUsageDescription: Cadence подключается к твоей ИИ на домашнем сервере
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true

@@ -59,6 +59,7 @@ struct MiniPlayerView: View {
 
 struct NowPlayingView: View {
     @Environment(PlayerEngine.self) private var player
+    @Environment(TasteStore.self) private var taste
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -147,9 +148,10 @@ struct NowPlayingView: View {
                     .frame(width: 44, height: 44, alignment: .leading)
             }
             Spacer()
-            Text("NOW PLAYING")
+            Text(player.waveTitle.map { "WAVE · \($0)" } ?? "NOW PLAYING")
                 .font(Theme.mono(11, .bold))
-                .foregroundStyle(Theme.dim)
+                .foregroundStyle(player.waveTitle == nil ? Theme.dim : Theme.accent)
+                .lineLimit(1)
             Spacer()
             Color.clear.frame(width: 44, height: 44)
         }
@@ -207,7 +209,8 @@ struct NowPlayingView: View {
     }
 
     private var secondary: some View {
-        HStack(spacing: 60) {
+        let liked = player.current.map { taste.isLiked($0.id) } ?? false
+        return HStack(spacing: 40) {
             Button { player.shuffle.toggle() } label: {
                 Image(systemName: "shuffle")
                     .foregroundStyle(player.shuffle ? Theme.accent : Theme.dim)
@@ -215,6 +218,23 @@ struct NowPlayingView: View {
             Button { player.cycleRepeat() } label: {
                 Image(systemName: player.repeatMode == .one ? "repeat.1" : "repeat")
                     .foregroundStyle(player.repeatMode == .off ? Theme.dim : Theme.accent)
+            }
+            Button {
+                if let id = player.current?.id { taste.toggleLike(id) }
+            } label: {
+                Image(systemName: liked ? "heart.fill" : "heart")
+                    .foregroundStyle(liked ? Theme.accent : Theme.dim)
+            }
+            Menu {
+                Button("15 min") { player.setSleep(minutes: 15) }
+                Button("30 min") { player.setSleep(minutes: 30) }
+                Button("60 min") { player.setSleep(minutes: 60) }
+                if player.sleepDeadline != nil {
+                    Button("Off", role: .destructive) { player.setSleep(minutes: nil) }
+                }
+            } label: {
+                Image(systemName: "moon.zzz")
+                    .foregroundStyle(player.sleepDeadline == nil ? Theme.dim : Theme.accent)
             }
         }
         .font(.system(size: 18))

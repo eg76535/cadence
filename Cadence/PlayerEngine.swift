@@ -13,8 +13,15 @@ final class PlayerEngine {
     var shuffle = false
     var repeatMode: RepeatMode = .off
 
+    /// Название активной «волны» (nil = обычная очередь)
+    private(set) var waveTitle: String?
+    /// Когда сработает таймер сна (nil = выключен)
+    private(set) var sleepDeadline: Date?
+
     /// Нужен, чтобы брать обложки; выставляется из RootView
     @ObservationIgnored var library: Library?
+    /// Сюда пишутся прослушивания, скипы, время; выставляется из RootView
+    @ObservationIgnored var taste: TasteStore?
 
     var current: Track? { queue.indices.contains(index) ? queue[index] : nil }
 
@@ -30,6 +37,15 @@ final class PlayerEngine {
     private let player = AVPlayer()
     @ObservationIgnored private var timeObserver: Any?
 
+    // Волна: движок сам дописывает очередь, пока она не кончилась
+    @ObservationIgnored private var waveProvider: (@MainActor ([Track]) -> [Track])?
+
+    // Учёт прослушивания текущего трека
+    @ObservationIgnored private var listeningTrack: Track?
+    @ObservationIgnored private var listened: TimeInterval = 0
+    @ObservationIgnored private var lastTick: TimeInterval = 0
+    @ObservationIgnored private var countedPlay = false
+
     init() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
 
@@ -40,7 +56,7 @@ final class PlayerEngine {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let s = time.seconds
-                self.currentTime = s.isFinite ? s : 0
+                self.tick(s.isFinite ? s : 0)
             }
         }
 
@@ -69,11 +85,29 @@ final class PlayerEngine {
 
     func play(_ tracks: [Track], startAt start: Int = 0, shuffled: Bool? = nil) {
         guard !tracks.isEmpty else { return }
+        waveProvider = nil
+        waveTitle = nil
         queue = tracks
         if let shuffled { shuffle = shuffled }
         var first = min(max(start, 0), tracks.count - 1)
         if shuffled == true { first = Int.random(in: 0..<tracks.count) }
         load(first)
+    }
+
+    /// Бесконечная очередь: `provider` получает последние треки и возвращает, чем её продолжить.
+    func startWave(title: String, first: [Track], provider: @escaping @MainActor ([Track]) -> [Track]) {
+        guard !first.isEmpty else { return }
+        queue = first
+        shuffle = false
+        repeatMode = .off
+        waveTitle = title
+        waveProvider = provider
+        load(0)
+    }
+
+    func stopWave() {
+        waveProvider = nil
+        waveTitle = nil
     }
 
     func toggle() {
@@ -106,6 +140,7 @@ final class PlayerEngine {
         } else if repeatMode == .all {
             load(0)
         } else {
+            finishListen()
             pause()
             seek(to: 0)
         }
@@ -129,11 +164,19 @@ final class PlayerEngine {
 
     func cycleRepeat() { repeatMode = repeatMode.next }
 
+    /// nil = выключить. За 20 секунд до конца звук плавно затихает.
+    func setSleep(minutes: Int?) {
+        player.volume = 1
+        sleepDeadline = minutes.map { Date().addingTimeInterval(Double($0) * 60) }
+    }
+
     // MARK: - Внутреннее
 
     private func load(_ i: Int) {
         guard queue.indices.contains(i) else { return }
+        finishListen()
         index = i
+        listeningTrack = queue[i]
         let item = AVPlayerItem(url: queue[i].url)
         player.replaceCurrentItem(with: item)
         duration = queue[i].duration
@@ -142,15 +185,79 @@ final class PlayerEngine {
         player.play()
         isPlaying = true
         updateNowPlayingInfo()
+        refillWaveIfNeeded()
     }
 
     private func trackEnded() {
         if repeatMode == .one {
+            finishListen()
+            listeningTrack = current
             player.seek(to: .zero)
             player.play()
             return
         }
         next()
+    }
+
+    private func refillWaveIfNeeded() {
+        guard let provider = waveProvider, queue.count - index <= 4 else { return }
+        let more = provider(Array(queue.suffix(20)))
+        queue.append(contentsOf: more)
+        // не копим бесконечную историю
+        if index > 60 {
+            let drop = index - 30
+            queue.removeFirst(drop)
+            index -= drop
+        }
+    }
+
+    // MARK: - Учёт прослушивания (для вкуса и волны)
+
+    private func tick(_ t: TimeInterval) {
+        let delta = t - lastTick
+        lastTick = t
+        currentTime = t
+
+        // считаем только честное воспроизведение: перемотка (скачок больше 2 с) не в счёт
+        if isPlaying, delta > 0, delta < 2 {
+            listened += delta
+        }
+        checkCountedPlay()
+
+        if let deadline = sleepDeadline {
+            let left = deadline.timeIntervalSinceNow
+            if left <= 0 {
+                pause()
+                sleepDeadline = nil
+                player.volume = 1
+            } else if left < 20 {
+                player.volume = Float(left / 20)
+            }
+        }
+    }
+
+    /// «Прослушал» = минута или половина трека (но не меньше 15 с)
+    private func checkCountedPlay() {
+        guard !countedPlay, let t = listeningTrack, let taste else { return }
+        let threshold = min(60, max(t.duration * 0.5, 15))
+        if listened >= threshold {
+            countedPlay = true
+            taste.recordPlay(track: t)
+        }
+    }
+
+    /// Закрывает учёт текущего трека: добавляет время, засчитывает скип, если бросил в начале.
+    private func finishListen() {
+        defer {
+            listened = 0
+            countedPlay = false
+            lastTick = 0
+        }
+        guard let t = listeningTrack, let taste, listened > 1 else { return }
+        taste.addListening(track: t, seconds: listened)
+        if !countedPlay, listened < 25, listened / max(t.duration, 1) < 0.3 {
+            taste.recordSkip(track: t)
+        }
     }
 
     // MARK: - Экран блокировки

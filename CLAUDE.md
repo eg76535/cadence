@@ -36,6 +36,15 @@
 - `Views/ThemeViews.swift`: `WallView` (фон, волны), `PanelStyle` (стекло/плавающая плашка), `ThemesView`
 - `Views/RootView.swift`: вкладки FLOW / ALBUMS / SONGS, мини-плеер, шиты
 
+- `Taste/TasteStore.swift`: история прослушиваний, лайки, вишлист (JSON в Application Support). Пишет в него `PlayerEngine`
+- `Taste/AlbumTags.swift`: настроение альбомов (теги от ИИ + эвристика по жанру)
+- `Taste/WaveEngine.swift`: `WaveRequest` (фильтр), `WaveEngine.pick` (скоринг + взвешенная выборка), `WaveRunner` (запуск в плеере)
+- `Taste/Discover.swift`: рандом, подборки «для тебя», статистика, портрет вкуса для промптов
+- `AI/ServerAI.swift`: клиент к OpenAI-совместимой ИИ на домашнем сервере (разметка альбомов, текст -> волна, рекомендации)
+- `Views/DiscoverView.swift`, `Views/AISections.swift`: вкладка WAVE
+
+Правила для ИИ-части: сервер на CPU, поэтому запросы редкие, ответы маленькие (JSON), результаты кешируются. Любая фича обязана работать без сервера. Ключ и адрес лежат в UserDefaults (`ai.url`, `ai.model`, `ai.key`), в git ничего секретного не коммитим.
+
 ## Дальше (по приоритету)
 
 1. Починить первую сборку, если упадёт (v0.2 с темами и альбомной тоже ни разу не компилировалась), и подогнать вид по ощущениям пользователя.
